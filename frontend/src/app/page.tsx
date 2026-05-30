@@ -123,23 +123,6 @@ export default function HomePage() {
           )}
         </div>
 
-        {/* Stats Bar */}
-        <div className="flex items-center justify-center gap-4 md:gap-8 mb-16 w-full max-w-2xl mx-auto border-t border-b border-[#1e1e1e] py-6">
-          <div className="text-center">
-            <div className="font-['Space_Grotesk',sans-serif] text-2xl font-bold text-[#e5a00d]">847</div>
-            <div className="text-[10px] uppercase tracking-widest text-[#555555] font-['Geist_Mono',monospace]">companies researched</div>
-          </div>
-          <div className="w-px h-10 bg-[#1e1e1e]"></div>
-          <div className="text-center">
-            <div className="font-['Space_Grotesk',sans-serif] text-2xl font-bold text-[#e5a00d]">92%</div>
-            <div className="text-[10px] uppercase tracking-widest text-[#555555] font-['Geist_Mono',monospace]">accuracy rate</div>
-          </div>
-          <div className="w-px h-10 bg-[#1e1e1e]"></div>
-          <div className="text-center">
-            <div className="font-['Space_Grotesk',sans-serif] text-2xl font-bold text-[#e5a00d]">9</div>
-            <div className="text-[10px] uppercase tracking-widest text-[#555555] font-['Geist_Mono',monospace]">AI agents</div>
-          </div>
-        </div>
 
         {/* Recently Researched Table */}
         <div className="w-full bg-[#111111] border border-[#1e1e1e] rounded-xl overflow-hidden shadow-2xl mb-12">
