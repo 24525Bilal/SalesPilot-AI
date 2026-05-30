@@ -52,6 +52,14 @@
 | `/signals`              | Lead Signals — real-time intent monitoring     |
 | `/intel`                | Intel Stream — live intelligence feed          |
 
+## Bright Data Integration
+
+Our Orchestrator leverages Bright Data's powerful APIs to autonomously crawl the live internet and extract real-time intelligence instead of relying on outdated LLM training data:
+
+1. **SERP API (`search_google` & `search_google_news`)**: Powers the core research agents (News, Pain Points, Tech Stack, Competitors, Hiring) by performing native Google and News searches through residential proxies, bypassing CAPTCHAs to return structured intelligence.
+2. **Web Unlocker (`scrape_page`)**: Bypasses bot detection (like Cloudflare) to scrape the raw HTML/text content directly from target company homepages.
+3. **Data Collection API (DCA)**: Specifically targets Bright Data's pre-built LinkedIn Company Profile dataset (`gd_l1viktl72bvl7bjuj0`) to safely and effortlessly extract structured LinkedIn company data.
+
 ## 9 AI Agents
 
 1. **Research Agent** — Company overview via Bright Data web scraping
