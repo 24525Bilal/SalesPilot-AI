@@ -308,8 +308,6 @@ export default function ResearchPage() {
   const deal    = estimateDealValue(r);
 
   const intentScore = bi?.overall_score || 0;
-  const arcDasharray = 251.327;
-  const arcDashoffset = arcDasharray - (intentScore / 100) * arcDasharray;
 
   return (
     <div className="min-h-screen bg-[#0a0a0a] flex flex-col font-['Inter',sans-serif] text-[#e5e5e5] selection:bg-[rgba(229,160,13,0.1)] selection:text-[#e5a00d]">
@@ -378,7 +376,7 @@ export default function ResearchPage() {
                 <div className="relative w-[140px] h-[70px] mt-4 z-10 flex items-end justify-center overflow-hidden">
                   <svg className="absolute top-0 left-0 w-full h-[140px]" viewBox="0 0 200 200" style={{ transformOrigin: 'center' }}>
                     <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke="#1e1e1e" strokeLinecap="round" strokeWidth="12"></path>
-                    <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke={intentScore >= 75 ? "#22c55e" : "#e5a00d"} strokeLinecap="round" strokeWidth="12" strokeDasharray={arcDasharray} strokeDashoffset={arcDashoffset} style={{ transition: "stroke-dashoffset 1.5s ease-out" }}></path>
+                    <path d="M 20 100 A 80 80 0 0 1 180 100" fill="none" stroke={intentScore >= 75 ? "#22c55e" : "#e5a00d"} strokeLinecap="round" strokeWidth="12" pathLength="100" strokeDasharray="100" strokeDashoffset={100 - intentScore} style={{ transition: "stroke-dashoffset 1.5s ease-out" }}></path>
                   </svg>
                   <div className={`text-4xl font-['Space_Grotesk',sans-serif] font-bold mb-[-5px] ${intentScore >= 75 ? 'text-[#22c55e]' : 'text-[#e5a00d]'}`}>{intentScore}</div>
                 </div>
@@ -402,10 +400,12 @@ export default function ResearchPage() {
           </div>
         </section>
 
-        <div className="mt-8 flex flex-col gap-10">
-          {cp?.description && (
-            <p className="text-sm text-[#888888] leading-relaxed max-w-4xl">{cp.description}</p>
-          )}
+        <div className="mt-8 grid grid-cols-1 xl:grid-cols-12 gap-10">
+          {/* Left Column (Stats & Intel) */}
+          <div className="xl:col-span-7 flex flex-col gap-10">
+            {cp?.description && (
+              <p className="text-sm text-[#888888] leading-relaxed">{cp.description}</p>
+            )}
 
           {bi?.top_reasons && bi.top_reasons.length > 0 && (
             <div>
@@ -487,10 +487,13 @@ export default function ResearchPage() {
                 </div>
               </div>
             )}
+            </div>
           </div>
 
-          {drafts && drafts.length > 0 && (
-            <div className="mt-4">
+          {/* Right Column (Outreach Drafts) */}
+          <div className="xl:col-span-5">
+            {drafts && drafts.length > 0 && (
+              <div className="sticky top-[100px]">
               <div className="flex items-center gap-2 mb-4">
                 <span className="material-symbols-outlined text-[#e5a00d] text-[18px]">mail</span>
                 <span className="font-['Geist_Mono',monospace] text-xs font-bold text-[#e5e5e5] uppercase tracking-widest">AI-Generated Outreach Emails</span>
@@ -525,8 +528,9 @@ export default function ResearchPage() {
                   {drafts[activeTab].body}
                 </div>
               </div>
-            </div>
-          )}
+              </div>
+            )}
+          </div>
         </div>
       </main>
 
