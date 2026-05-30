@@ -100,7 +100,7 @@ KEY SIGNALS:
 - Migration Signals: {', '.join(competitor_intel.migration_signals[:2])}
 - Displacement Opportunities: {', '.join(competitor_intel.displacement_opportunities[:2])}
 
-LEADERSHIP: {json.dumps([{{'name': l.get('name',''), 'title': l.get('title','')}} for l in company_profile.leadership[:3]])}
+LEADERSHIP: {json.dumps([{'name': l.get('name',''), 'title': l.get('title','')} for l in company_profile.leadership[:3]])}
 """
 
     drafts = []
