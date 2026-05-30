@@ -104,24 +104,18 @@ async def run_research_pipeline(
             setattr(report, attr, result)
         return result
 
-    # Run agents in 2 batches of 3 (13s apart) to stay within Gemini's 5 req/min limit
-    batch1 = await asyncio.gather(
-        _run_and_store(event_queue, "research",   run_research_agent,   "company_profile",  company_name, domain),
-        _run_and_store(event_queue, "hiring",     run_hiring_agent,     "hiring_signals",   company_name),
-        _run_and_store(event_queue, "news",       run_news_agent,       "funding_news",     company_name),
-        return_exceptions=True,
-    )
+    tasks = [
+        ("research",   run_research_agent,   "company_profile",  company_name, domain),
+        ("hiring",     run_hiring_agent,     "hiring_signals",   company_name),
+        ("news",       run_news_agent,       "funding_news",     company_name),
+        ("techstack",  run_techstack_agent,  "tech_stack",       company_name, domain or ""),
+        ("painpoint",  run_painpoint_agent,  "pain_points",      company_name),
+        ("competitor", run_competitor_agent, "competitor_intel", company_name),
+    ]
 
-    await asyncio.sleep(13)  # let Gemini rate limit window reset
-
-    batch2 = await asyncio.gather(
-        _run_and_store(event_queue, "techstack",  run_techstack_agent,  "tech_stack",       company_name, domain or ""),
-        _run_and_store(event_queue, "painpoint",  run_painpoint_agent,  "pain_points",      company_name),
-        _run_and_store(event_queue, "competitor", run_competitor_agent, "competitor_intel", company_name),
-        return_exceptions=True,
-    )
-
-    parallel_results = list(batch1) + list(batch2)
+    for name, func, attr, *args in tasks:
+        await _run_and_store(event_queue, name, func, attr, *args)
+        await asyncio.sleep(2) # 2s gap between each API call
 
 
     # Unpack with fallbacks
