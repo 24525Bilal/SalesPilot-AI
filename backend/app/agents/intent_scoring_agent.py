@@ -53,50 +53,33 @@ async def run_intent_scoring_agent(
     """Calculate explainable buying intent score from all research signals."""
     llm = get_llm_service()
 
-    # Compile all research into a structured summary
-    research_summary = f"""
-COMPANY PROFILE:
-- Name: {company_profile.name}
-- Industry: {company_profile.industry}
-- Employees: {company_profile.employee_count}
-- Revenue: {company_profile.revenue_estimate}
-- Business Model: {company_profile.business_model}
-- Key Facts: {', '.join(company_profile.key_facts)}
+    # Compact summary to stay within free-tier token limits (~1500 tokens)
+    research_summary = f"""COMPANY: {company_profile.name} | {company_profile.industry} | {company_profile.employee_count} employees | {company_profile.business_model}
+KEY FACTS: {', '.join(company_profile.key_facts[:3])}
 
-HIRING SIGNALS:
-- Total Open Roles: {hiring_signals.total_open_roles}
-- Departments Hiring: {', '.join(hiring_signals.departments_hiring)}
-- Hiring Velocity: {hiring_signals.hiring_velocity}
-- Growth Flags: {', '.join(hiring_signals.growth_intent_flags)}
-- Summary: {hiring_signals.summary}
+HIRING: {hiring_signals.total_open_roles} open roles | velocity: {hiring_signals.hiring_velocity} | depts: {', '.join(hiring_signals.departments_hiring[:4])}
+GROWTH FLAGS: {', '.join(hiring_signals.growth_intent_flags[:3])}
 
-FUNDING & NEWS:
-- Total Funding: {funding_news.total_funding}
-- Latest Round: {funding_news.latest_round}
-- Investors: {', '.join(funding_news.investors)}
-- Growth Signals: {', '.join(funding_news.growth_signals)}
-- Summary: {funding_news.summary}
+FUNDING: {funding_news.latest_round} | total: {funding_news.total_funding} | investors: {', '.join(funding_news.investors[:3])}
+RECENT NEWS: {'; '.join([e.get('title','') for e in ([ev.__dict__ if hasattr(ev,'__dict__') else ev for ev in funding_news.events[:2]])])}
 
-TECH STACK:
-- Current Tools: {json.dumps(tech_stack.current_tools)}
-- Platforms: {', '.join(tech_stack.platforms)}
-- Potential Gaps: {', '.join(tech_stack.potential_gaps)}
-- Summary: {tech_stack.summary}
+TECH GAPS: {', '.join(tech_stack.potential_gaps[:3])}
+CURRENT TOOLS: {', '.join([t.get('name','') if isinstance(t,dict) else getattr(t,'name','') for t in tech_stack.current_tools[:5]])}
 
-PAIN POINTS:
-- Pain Points: {json.dumps(pain_points.pain_points)}
-- Summary: {pain_points.summary}
+PAIN POINTS: {'; '.join([p.get('description','') if isinstance(p,dict) else getattr(p,'description','') for p in pain_points.pain_points[:3]])}
 
-COMPETITOR INTEL:
-- Current Vendors: {json.dumps(competitor_intel.current_vendors)}
-- Pricing Frustrations: {', '.join(competitor_intel.pricing_frustrations)}
-- Migration Signals: {', '.join(competitor_intel.migration_signals)}
-- Displacement Opportunities: {', '.join(competitor_intel.displacement_opportunities)}
-- Summary: {competitor_intel.summary}
+COMPETITORS: {', '.join([v.get('name','') if isinstance(v,dict) else getattr(v,'name','') for v in competitor_intel.current_vendors[:4]])}
+DISPLACEMENT: {', '.join(competitor_intel.displacement_opportunities[:2])}
+MIGRATION SIGNALS: {', '.join(competitor_intel.migration_signals[:2])}
 """
 
-    return await llm.analyze(
+    result = await llm.analyze(
         system_prompt=SYSTEM_PROMPT,
         user_prompt=f"Calculate the buying intent score for this company:\n\n{research_summary}",
         response_model=BuyingIntentScore,
     )
+
+    # Return None if scoring failed (empty model with default 0 score)
+    if result.overall_score == 0 and not result.breakdown:
+        return None
+    return result
