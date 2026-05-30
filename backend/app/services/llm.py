@@ -1,4 +1,4 @@
-"""SalesPilot AI — LLM Service with Gemini → Groq automatic fallback."""
+"""SalesPilot AI — LLM Service with Gemini → Groq → OpenRouter fallback chain."""
 
 import json
 import asyncio
@@ -6,6 +6,7 @@ from typing import Type, TypeVar
 from pydantic import BaseModel
 from langchain_google_genai import ChatGoogleGenerativeAI
 from langchain_groq import ChatGroq
+from langchain_openai import ChatOpenAI
 from langchain_core.messages import HumanMessage, SystemMessage
 
 from app.config import get_settings
@@ -23,9 +24,17 @@ EXAMPLES = {
     "OutreachDraft": '{"format_type":"enterprise","subject":"Optimizing Operations at Acme Corp","body":"Hi [Name],\\n\\nI noticed Acme Corp recently raised a Series C...","key_personalization_points":["Series C funding","45 open roles in sales"]}',
 }
 
+# Free models on OpenRouter with good JSON output
+OPENROUTER_MODELS = [
+    "meta-llama/llama-3.3-70b-instruct:free",
+    "mistralai/mistral-7b-instruct:free",
+    "google/gemma-2-9b-it:free",
+]
+
 
 def _parse_response(content: str, response_model: Type[T]) -> T:
-    """Parse LLM response string into a Pydantic model."""
+    if not content or not content.strip():
+        raise ValueError("Empty response from LLM")
     content = content.strip()
     if content.startswith("```"):
         lines = content.split("\n")
@@ -34,7 +43,6 @@ def _parse_response(content: str, response_model: Type[T]) -> T:
         data = json.loads(content)
         return response_model.model_validate(data)
     except Exception:
-        # Try to extract JSON substring
         start = content.find("{")
         end = content.rfind("}") + 1
         if start >= 0 and end > start:
@@ -43,11 +51,16 @@ def _parse_response(content: str, response_model: Type[T]) -> T:
         raise
 
 
+def _is_rate_limit(err: str) -> bool:
+    return any(x in err for x in ["429", "RESOURCE_EXHAUSTED", "rate_limit_exceeded", "Rate limit"])
+
+
 class LLMService:
-    """Gemini primary → Groq fallback for all LLM calls."""
+    """Gemini (primary) → Groq (fallback) → OpenRouter (3rd fallback)."""
 
     def __init__(self):
         settings = get_settings()
+
         self.gemini = ChatGoogleGenerativeAI(
             model="gemini-2.5-flash",
             google_api_key=settings.google_api_key,
@@ -62,8 +75,25 @@ class LLMService:
             max_tokens=4096,
         ) if settings.groq_api_key else None
 
-        if self.groq:
-            print("   Groq fallback: ready (llama-3.3-70b)")
+        # Create multiple OpenRouter clients with different free models
+        self.openrouter_clients = []
+        if settings.openrouter_api_key:
+            for model in OPENROUTER_MODELS:
+                self.openrouter_clients.append(ChatOpenAI(
+                    model=model,
+                    api_key=settings.openrouter_api_key,
+                    base_url="https://openrouter.ai/api/v1",
+                    temperature=0.3,
+                    max_tokens=2048,
+                    default_headers={
+                        "HTTP-Referer": "https://salespilot.ai",
+                        "X-Title": "SalesPilot AI",
+                    },
+                ))
+        self.openrouter = self.openrouter_clients[0] if self.openrouter_clients else None
+
+        active = [n for n, v in [("Gemini", self.gemini), ("Groq", self.groq), ("OpenRouter", self.openrouter)] if v]
+        print(f"   LLM chain: {' → '.join(active)}")
 
     def _build_messages(self, system_prompt: str, user_prompt: str, example: str):
         return [
@@ -79,33 +109,34 @@ class LLMService:
         example = EXAMPLES.get(response_model.__name__, "{}")
         messages = self._build_messages(system_prompt, user_prompt, example)
 
-        # Try Gemini first (with 1 retry on rate limit), then fall back to Groq
         providers = []
         if self.gemini:
-            providers.append(("Gemini", self.gemini, True))   # True = retry on 429
+            providers.append(("Gemini", self.gemini))
         if self.groq:
-            providers.append(("Groq", self.groq, False))
+            providers.append(("Groq", self.groq))
+        # Try all OpenRouter free models as fallback
+        for i, or_client in enumerate(self.openrouter_clients):
+            model_name = OPENROUTER_MODELS[i].split("/")[-1]
+            providers.append((f"OpenRouter({model_name})", or_client))
 
-        for provider_name, llm, retry_on_ratelimit in providers:
-            for attempt in range(2 if retry_on_ratelimit else 1):
-                try:
-                    response = await llm.ainvoke(messages)
-                    result = _parse_response(response.content, response_model)
-                    if provider_name != "Gemini":
-                        print(f"[LLM] Used {provider_name} for {response_model.__name__}")
-                    return result
-                except Exception as e:
-                    err = str(e)
-                    if ("429" in err or "RESOURCE_EXHAUSTED" in err) and retry_on_ratelimit:
-                        print(f"[LLM] Gemini rate limited → switching to Groq instantly...")
-                        break  # Break retry loop → fall through to Groq immediately
-                    elif attempt == 0 and retry_on_ratelimit:
-                        continue
-                    else:
-                        print(f"[LLM] {provider_name} error: {e}")
-                        break  # Try next provider
+        for provider_name, llm in providers:
+            try:
+                response = await llm.ainvoke(messages)
+                result = _parse_response(response.content, response_model)
+                if "Gemini" not in provider_name:
+                    print(f"[LLM] ✓ {provider_name} → {response_model.__name__}")
+                return result
+            except Exception as e:
+                err = str(e)
+                if _is_rate_limit(err):
+                    print(f"[LLM] {provider_name} rate limited → trying next...")
+                elif "Empty response" in err or "JSONDecodeError" in type(e).__name__:
+                    print(f"[LLM] {provider_name} empty/invalid response → trying next...")
+                else:
+                    print(f"[LLM] {provider_name} error: {e}")
+                continue
 
-        print(f"[LLM] All providers failed for {response_model.__name__}, returning empty")
+        print(f"[LLM] All providers exhausted for {response_model.__name__}, returning empty")
         return response_model()
 
     async def generate_text(self, system_prompt: str, user_prompt: str) -> str:
@@ -116,16 +147,18 @@ class LLMService:
             providers.append(("Gemini", self.gemini))
         if self.groq:
             providers.append(("Groq", self.groq))
+        if self.openrouter:
+            providers.append(("OpenRouter", self.openrouter))
 
         for provider_name, llm in providers:
             try:
                 response = await llm.ainvoke(messages)
                 return response.content.strip()
             except Exception as e:
-                if "429" in str(e) or "RESOURCE_EXHAUSTED" in str(e):
-                    print(f"[LLM] Gemini rate limited for text gen → trying Groq...")
-                    continue
-                print(f"[LLM] {provider_name} text error: {e}")
+                if _is_rate_limit(str(e)):
+                    print(f"[LLM] {provider_name} rate limited → trying next...")
+                else:
+                    print(f"[LLM] {provider_name} error: {e}")
                 continue
         return ""
 

@@ -13,6 +13,9 @@ class Settings(BaseSettings):
     # Groq - fallback LLM (30 req/min free)
     groq_api_key: str = ""
 
+    # OpenRouter - 3rd fallback (free models)
+    openrouter_api_key: str = ""
+
     # Bright Data ($250 Hackathon Credit)
     bright_data_api_token: str = ""
     bright_data_serp_zone: str = "serp"
