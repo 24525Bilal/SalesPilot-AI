@@ -51,6 +51,12 @@
 - **Intent Scoring**: Algorithmically determines a 0-100 Buying Intent Score based on tech stack gaps, recent funding, and aggressive hiring signals.
 - **One-Click CRM Sync**: Pushes fully enriched dossiers straight to HubSpot.
 
+## Infrastructure & Reliability
+
+- **Dockerized AWS Deployment**: Fully containerized with a highly optimized multi-stage Next.js builder, orchestrated by `supervisord` to run FastAPI, Node, and Nginx in a single lightweight VPS.
+- **Robust Real-Time SSE**: Real-time agent status streaming via Server-Sent Events, complete with Nginx proxy un-buffering (`proxy_buffering off`) for instantaneous UI updates.
+- **Fault-Tolerant State Recovery**: UI seamlessly infers active agents across page reloads using a hybrid approach of live SSE streams combined with incremental SQLite database saves.
+
 ## Pages
 
 | Route                   | Description                                    |
