@@ -18,6 +18,26 @@ const AGENTS = [
   { key: "email",          label: "Outreach Drafts",   desc: "Awaiting intent data.", icon: "mail" },
 ];
 
+function copyToClipboard(text: string) {
+  if (navigator.clipboard && window.isSecureContext) {
+    navigator.clipboard.writeText(text).catch(err => console.error("Clipboard API failed:", err));
+  } else {
+    // Fallback for non-HTTPS connections (like raw EC2 IP)
+    const textArea = document.createElement("textarea");
+    textArea.value = text;
+    textArea.style.position = "fixed"; // Avoid scrolling to bottom
+    document.body.appendChild(textArea);
+    textArea.focus();
+    textArea.select();
+    try {
+      document.execCommand('copy');
+    } catch (err) {
+      console.error('Fallback copy failed', err);
+    }
+    document.body.removeChild(textArea);
+  }
+}
+
 /** Estimate deal value based on company size and funding */
 function estimateDealValue(report: FullResearchReport): { low: number; high: number; tier: string } | null {
   const cp = report.company_profile;
@@ -61,6 +81,7 @@ export default function ResearchPage() {
   const [results, setResults]   = useState<FullResearchReport | null>(null);
   const [activeTab, setActiveTab] = useState(0);
   const [copied, setCopied]     = useState(false);
+  const [linkCopied, setLinkCopied] = useState(false);
   const [expanded, setExpanded] = useState<number | null>(0);
   const esRef = useRef<EventSource | null>(null);
   const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -187,7 +208,7 @@ export default function ResearchPage() {
   const handleCopy = useCallback(() => {
     if (!results?.outreach_drafts?.[activeTab]) return;
     const d = results.outreach_drafts[activeTab];
-    navigator.clipboard.writeText(`Subject: ${d.subject}\n\n${d.body}`);
+    copyToClipboard(`Subject: ${d.subject}\n\n${d.body}`);
     setCopied(true);
     setTimeout(() => setCopied(false), 2000);
   }, [results, activeTab]);
@@ -390,9 +411,16 @@ export default function ResearchPage() {
               <span className="material-symbols-outlined text-[18px]">picture_as_pdf</span>
               Export PDF
             </button>
-            <button className="px-4 py-2 text-sm font-medium text-[#e5e5e5] border border-[#1e1e1e] rounded-lg hover:bg-[#1a1a1a] transition-all flex items-center gap-2" onClick={() => {navigator.clipboard.writeText(window.location.href); alert("Copied!")}}>
-              <span className="material-symbols-outlined text-[18px]">link</span>
-              Copy Link
+            <button 
+              className={`px-4 py-2 text-sm font-medium border rounded-lg transition-all flex items-center gap-2 ${linkCopied ? 'border-[#22c55e] text-[#22c55e] bg-[rgba(34,197,94,0.1)]' : 'text-[#e5e5e5] border-[#1e1e1e] hover:bg-[#1a1a1a]'}`}
+              onClick={() => {
+                copyToClipboard(window.location.href);
+                setLinkCopied(true);
+                setTimeout(() => setLinkCopied(false), 2000);
+              }}
+            >
+              <span className="material-symbols-outlined text-[18px]">{linkCopied ? 'check' : 'link'}</span>
+              {linkCopied ? 'Copied!' : 'Copy Link'}
             </button>
           </div>
         </div>
