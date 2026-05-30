@@ -97,11 +97,14 @@ async def run_research_pipeline(
     for name in agent_names:
         await _emit(event_queue, name, AgentStatus.PENDING)
 
+    from app.database import save_job
+
     # Run the 6 research agents in parallel — store results incrementally
     async def _run_and_store(queue, name, func, attr, *args):
         result = await _run_agent_with_status(queue, name, func, *args)
         if result is not None:
             setattr(report, attr, result)
+            save_job(report)
         return result
 
     tasks = [
@@ -145,6 +148,7 @@ async def run_research_pipeline(
         "G2 Reviews (Bright Data)",
         "Indeed / Job Boards (Bright Data)",
     ]
+    save_job(report)
 
     # ═══════════════════════════════════════════════════════
     # PHASE 2: Intent Scoring (sequential — needs all research)
@@ -160,6 +164,7 @@ async def run_research_pipeline(
         tech_stack, pain_points, competitor_intel,
     )
     report.buying_intent = intent_score
+    save_job(report)
 
     # ═══════════════════════════════════════════════════════
     # PHASE 3: Email Generation (sequential — needs research + score)
@@ -176,6 +181,7 @@ async def run_research_pipeline(
             pain_points, competitor_intel, intent_score,
         )
         report.outreach_drafts = outreach_drafts or []
+        save_job(report)
     else:
         await _emit(event_queue, "email", AgentStatus.ERROR, "Skipped — no intent score available")
 

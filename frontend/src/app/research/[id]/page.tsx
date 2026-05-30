@@ -65,55 +65,128 @@ export default function ResearchPage() {
   const [syncing, setSyncing]   = useState(false);
   const [expanded, setExpanded] = useState<number | null>(0);
   const esRef = useRef<EventSource | null>(null);
+  const pollRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  const isComplete = useRef(false);
 
   const [logs, setLogs] = useState<{time:string, text:string, type:string}[]>([]);
 
-  useEffect(() => {
-    getResearchResults(jobId).then((data) => {
-      if (data.status === "complete" || data.status === "failed") {
-        setStatuses(deriveStatuses(data));
-        setResults(data);
-        setPhase("results");
-      } else {
-        setStatuses(deriveStatuses(data));
-        connectSSE();
-      }
-    }).catch(() => connectSSE());
-
-    function connectSSE() {
-      esRef.current = streamResearch(
-        jobId,
-        (e: AgentStatusEvent) => {
-          setStatuses(p => ({ ...p, [e.agent_name]: e.status }));
-          setLogs(prev => [...prev, {
-            time: new Date().toLocaleTimeString([], { hour12: false }),
-            text: `[sys] ${e.agent_name} ${e.status}`,
-            type: e.status === 'complete' ? 'success' : e.status === 'running' ? 'running' : 'info'
-          }]);
-        },
-        () => getResearchResults(jobId).then(d => { setResults(d); setPhase("results"); }),
-        (err: string) => {
-          console.error(err);
-          getResearchResults(jobId).then(d => { setResults(d); setPhase("results"); });
-        },
-      );
-    }
-    return () => { esRef.current?.close(); };
-  }, [jobId]);
-
   function deriveStatuses(data: FullResearchReport): Record<string, string> {
     const s: Record<string, string> = {};
-    if (data.company_profile != null)      s["research"]       = "complete";
-    if (data.hiring_signals != null)       s["hiring"]         = "complete";
-    if (data.funding_news != null)         s["news"]           = "complete";
-    if (data.tech_stack != null)           s["techstack"]      = "complete";
-    if (data.pain_points != null)          s["painpoint"]      = "complete";
-    if (data.competitor_intel != null)     s["competitor"]     = "complete";
-    if (data.buying_intent != null)        s["intent_scoring"] = "complete";
-    if (data.outreach_drafts?.length > 0)  s["email"]          = "complete";
-    if (data.crm_synced)                   s["crm"]            = "complete";
+    const isJobRunning = data.status === "running";
+    
+    const phase1Complete = data.company_profile != null && 
+                           data.hiring_signals != null && 
+                           data.funding_news != null && 
+                           data.tech_stack != null && 
+                           data.pain_points != null && 
+                           data.competitor_intel != null;
+
+    if (data.company_profile != null) s["research"] = "complete";
+    else if (isJobRunning) s["research"] = "running";
+
+    if (data.hiring_signals != null) s["hiring"] = "complete";
+    else if (isJobRunning) s["hiring"] = "running";
+
+    if (data.funding_news != null) s["news"] = "complete";
+    else if (isJobRunning) s["news"] = "running";
+
+    if (data.tech_stack != null) s["techstack"] = "complete";
+    else if (isJobRunning) s["techstack"] = "running";
+
+    if (data.pain_points != null) s["painpoint"] = "complete";
+    else if (isJobRunning) s["painpoint"] = "running";
+
+    if (data.competitor_intel != null) s["competitor"] = "complete";
+    else if (isJobRunning) s["competitor"] = "running";
+
+    if (data.buying_intent != null) s["intent_scoring"] = "complete";
+    else if (isJobRunning && phase1Complete) s["intent_scoring"] = "running";
+
+    if (data.outreach_drafts?.length > 0) s["email"] = "complete";
+    else if (isJobRunning && data.buying_intent != null) s["email"] = "running";
+
+    if (data.crm_synced) s["crm"] = "complete";
+    
     return s;
   }
+
+  function stopAll() {
+    esRef.current?.close();
+    esRef.current = null;
+    if (pollRef.current) clearInterval(pollRef.current);
+    pollRef.current = null;
+  }
+
+  function handleComplete(data: FullResearchReport) {
+    if (isComplete.current) return;
+    isComplete.current = true;
+    stopAll();
+    setStatuses(deriveStatuses(data));
+    setResults(data);
+    setPhase("results");
+  }
+
+  function startPolling() {
+    if (pollRef.current) return; // already polling
+    pollRef.current = setInterval(() => {
+      if (isComplete.current) return;
+      getResearchResults(jobId).then((data) => {
+        const derived = deriveStatuses(data);
+        if (Object.keys(derived).length > 0) {
+          setStatuses(p => ({ ...p, ...derived }));
+        }
+        if (data.status === "complete" || data.status === "failed") {
+          handleComplete(data);
+        }
+      }).catch(() => {}); // ignore transient errors
+    }, 5000);
+  }
+
+  function connectSSE() {
+    if (esRef.current) return; // already connected
+    esRef.current = streamResearch(
+      jobId,
+      (e: AgentStatusEvent) => {
+        setStatuses(p => ({ ...p, [e.agent_name]: e.status }));
+        setLogs(prev => [...prev, {
+          time: new Date().toLocaleTimeString([], { hour12: false }),
+          text: `[sys] ${e.agent_name} ${e.status}`,
+          type: e.status === 'complete' ? 'success' : e.status === 'running' ? 'running' : 'info'
+        }]);
+      },
+      () => {
+        // SSE pipeline complete signal — fetch final results
+        getResearchResults(jobId).then(handleComplete).catch(() => {});
+      },
+      () => {
+        // SSE error/dropped — keep polling as fallback
+        esRef.current = null;
+        if (!isComplete.current) startPolling();
+      },
+    );
+  }
+
+  useEffect(() => {
+    // Initial fetch to determine current state
+    getResearchResults(jobId).then((data) => {
+      setStatuses(deriveStatuses(data));
+      if (data.status === "complete" || data.status === "failed") {
+        handleComplete(data);
+      } else {
+        // Job is in progress — connect SSE AND start polling as safety net
+        connectSSE();
+        startPolling();
+      }
+    }).catch(() => {
+      // Can't reach API yet — try SSE anyway
+      connectSSE();
+      startPolling();
+    });
+
+    return () => stopAll();
+  // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [jobId]);
+
 
   const handleCopy = useCallback(() => {
     if (!results?.outreach_drafts?.[activeTab]) return;
