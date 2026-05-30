@@ -35,22 +35,29 @@
 |-----------|-----------------------------------------------------|
 | Frontend  | Next.js 16, Tailwind CSS 4, TypeScript              |
 | Backend   | FastAPI, Python 3.11+, Pydantic v2                  |
+| Database  | SQLite (Local File Persistence)                     |
 | AI/LLM    | Google Gemini 2.5 Flash (via langchain-google-genai) |
 | Web Data  | Bright Data SERP API, Web Scraper API               |
 | CRM       | HubSpot API (free tier)                             |
 | Streaming | Server-Sent Events (SSE)                            |
 | Design    | "Deep Space & Ember" theme (Google Stitch)          |
 
+## Key Features
+
+- **Autonomous Research Pipeline**: 9 specialized AI agents parallel-crawl the web and analyze data using Bright Data.
+- **AI Head-to-Head Comparison**: Select any two completed company researches to generate a decisive, opinionated 8-dimension comparison report with a clear winner and risk analysis.
+- **Local SQLite Persistence**: All research and comparison histories are instantly saved to a local database, preserving your data across server restarts.
+- **Real-Time Agent Feed**: Watch the AI agents work in real-time with Server-Sent Events (SSE) streaming updates directly to the frontend.
+- **Intent Scoring**: Algorithmically determines a 0-100 Buying Intent Score based on tech stack gaps, recent funding, and aggressive hiring signals.
+- **One-Click CRM Sync**: Pushes fully enriched dossiers straight to HubSpot.
+
 ## Pages
 
 | Route                   | Description                                    |
 |-------------------------|------------------------------------------------|
-| `/`                     | Mission Control Dashboard — command terminal   |
-| `/research`             | Agent Hive — 9 deployed agents overview        |
+| `/`                     | Mission Control Dashboard & Research History   |
 | `/research/[id]`        | Research Pipeline + Intelligence Dossier       |
-| `/history`              | Master Intel Archive — all past research       |
-| `/signals`              | Lead Signals — real-time intent monitoring     |
-| `/intel`                | Intel Stream — live intelligence feed          |
+| `/compare/[idA]/[idB]`  | AI Head-to-Head Comparison Report              |
 
 ## Bright Data Integration
 
@@ -97,15 +104,12 @@ GEMINI_API_KEY=your_key
 HUBSPOT_ACCESS_TOKEN=your_token
 ```
 
-## Demo Mode
-
-The frontend works in **demo mode** without any backend — click any company in the Live Signal Feed or type a company name to see the full intelligence dossier with sample data.
-
 ## Built With
 
 - **Bright Data** — Web scraping, SERP API, and web intelligence ($250 credit)
 - **Google Gemini 2.5 Flash** — LLM for analysis and email generation (free tier)
 - **HubSpot** — CRM integration (free tier)
+- **SQLite** — Local Database Persistence
 - **Google Stitch** — UI/UX design system
 
 ## License
