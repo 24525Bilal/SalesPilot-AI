@@ -1,8 +1,7 @@
 """SalesPilot AI — CRM API Router."""
 
 from fastapi import APIRouter, HTTPException
-
-from app.routers.research import _jobs
+from app.database import get_job, save_job
 from app.services.hubspot import get_hubspot_service
 
 router = APIRouter()
@@ -11,10 +10,10 @@ router = APIRouter()
 @router.post("/crm/sync/{job_id}")
 async def sync_to_crm(job_id: str):
     """Push research results to HubSpot CRM."""
-    if job_id not in _jobs:
+    report = get_job(job_id)
+    if not report:
         raise HTTPException(status_code=404, detail="Job not found")
 
-    report = _jobs[job_id]
     if report.status.value != "complete":
         raise HTTPException(status_code=400, detail="Research not yet complete")
 
@@ -23,6 +22,7 @@ async def sync_to_crm(job_id: str):
         result = await hubspot.sync_report(report)
         report.crm_synced = True
         report.crm_record_id = result.get("company_id")
+        save_job(report)
         return {
             "status": "synced",
             "company_id": result.get("company_id"),

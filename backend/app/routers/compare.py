@@ -65,20 +65,21 @@ Win margin: "decisive" = 15+ point gap, "moderate" = 8-14 points, "close" = <8 p
 @router.post("/compare", response_model=ComparisonReport)
 async def compare_companies(payload: dict):
     """Generate AI comparison report for two completed research jobs."""
-    from app.routers.research import _jobs   # local import to avoid circular dep
+    from app.database import get_job
 
     job_id_a = payload.get("job_id_a", "")
     job_id_b = payload.get("job_id_b", "")
 
     if not job_id_a or not job_id_b:
         raise HTTPException(status_code=400, detail="job_id_a and job_id_b are required")
-    if job_id_a not in _jobs:
-        raise HTTPException(status_code=404, detail=f"Job '{job_id_a}' not found")
-    if job_id_b not in _jobs:
-        raise HTTPException(status_code=404, detail=f"Job '{job_id_b}' not found")
 
-    report_a: FullResearchReport = _jobs[job_id_a]
-    report_b: FullResearchReport = _jobs[job_id_b]
+    report_a: FullResearchReport = get_job(job_id_a)
+    report_b: FullResearchReport = get_job(job_id_b)
+
+    if not report_a:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id_a}' not found")
+    if not report_b:
+        raise HTTPException(status_code=404, detail=f"Job '{job_id_b}' not found")
 
     if report_a.status.value != "complete":
         raise HTTPException(status_code=400, detail=f"Research for '{report_a.company_name}' is not complete yet")

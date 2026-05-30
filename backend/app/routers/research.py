@@ -18,11 +18,11 @@ from app.models.schemas import (
     AgentStatusEvent,
 )
 from app.agents.orchestrator import run_research_pipeline
+from app.database import save_job, get_job, get_all_jobs
 
 router = APIRouter()
 
-# In-memory store (replace with DB in production)
-_jobs: dict[str, FullResearchReport] = {}
+# In-memory store for streaming events (DB handles persistence)
 _job_events: dict[str, asyncio.Queue] = {}
 
 
@@ -38,7 +38,7 @@ async def start_research(request: CompanyResearchRequest):
         status=JobStatus.QUEUED,
         created_at=datetime.utcnow(),
     )
-    _jobs[job_id] = report
+    save_job(report)
     _job_events[job_id] = asyncio.Queue()
 
     # Run pipeline in background
@@ -54,9 +54,16 @@ async def start_research(request: CompanyResearchRequest):
 
 async def _execute_research(job_id: str, request: CompanyResearchRequest):
     """Execute the full research pipeline and update job state."""
-    report = _jobs[job_id]
-    event_queue = _job_events[job_id]
+    report = get_job(job_id)
+    if not report:
+        return
+    event_queue = _job_events.get(job_id)
+    if not event_queue:
+        event_queue = asyncio.Queue()
+        _job_events[job_id] = event_queue
+        
     report.status = JobStatus.RUNNING
+    save_job(report)
 
     try:
         # Run the orchestrator — it yields status events as agents complete
@@ -78,6 +85,7 @@ async def _execute_research(job_id: str, request: CompanyResearchRequest):
         report.outreach_drafts = final_report.outreach_drafts
         report.status = JobStatus.COMPLETE
         report.completed_at = datetime.utcnow()
+        save_job(report)
 
         # Signal completion
         await event_queue.put(
@@ -90,6 +98,7 @@ async def _execute_research(job_id: str, request: CompanyResearchRequest):
 
     except Exception as e:
         report.status = JobStatus.FAILED
+        save_job(report)
         await event_queue.put(
             AgentStatusEvent(
                 agent_name="pipeline",
@@ -103,8 +112,11 @@ async def _execute_research(job_id: str, request: CompanyResearchRequest):
 @router.get("/research/{job_id}/stream")
 async def stream_research_status(job_id: str):
     """SSE endpoint for real-time agent status updates."""
-    if job_id not in _jobs:
+    if not get_job(job_id):
         raise HTTPException(status_code=404, detail="Job not found")
+        
+    if job_id not in _job_events:
+        _job_events[job_id] = asyncio.Queue()
 
     async def event_generator() -> AsyncGenerator[dict, None]:
         queue = _job_events[job_id]
@@ -133,18 +145,18 @@ async def stream_research_status(job_id: str):
 @router.get("/research/{job_id}", response_model=FullResearchReport)
 async def get_research_results(job_id: str):
     """Get the full research report for a completed job."""
-    if job_id not in _jobs:
+    report = get_job(job_id)
+    if not report:
         raise HTTPException(status_code=404, detail="Job not found")
-    return _jobs[job_id]
+    return report
 
 
 @router.get("/research", response_model=list[dict])
 async def get_research_history():
     """List all past research jobs."""
     history = []
-    for job_id, report in sorted(
-        _jobs.items(), key=lambda x: x[1].created_at, reverse=True
-    ):
+    jobs = get_all_jobs()
+    for report in jobs:
         history.append({
             "job_id": report.job_id,
             "company_name": report.company_name,

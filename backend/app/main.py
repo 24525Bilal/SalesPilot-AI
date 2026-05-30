@@ -5,12 +5,15 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.config import get_settings
-from app.routers import research, crm
+from app.routers import research, crm, compare
 
+
+from app.database import init_db
 
 @asynccontextmanager
 async def lifespan(app: FastAPI):
     """Application lifespan — startup and shutdown events."""
+    init_db()
     settings = get_settings()
     print(f"🚀 SalesPilot AI starting in {settings.app_env} mode")
     print(f"   Demo mode: {settings.demo_mode}")
